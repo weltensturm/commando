@@ -1,0 +1,11 @@
+
+
+import system
+
+talk = fn x y z:
+    echo x
+    echo y
+    echo z:
+        test
+
+talk a b c
