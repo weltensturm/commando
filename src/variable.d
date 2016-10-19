@@ -16,6 +16,7 @@ class Variable {
 		double number;
 		Function func;
 		TableValue table;
+		Statement[] block;
 	}
 
 	enum Type {
@@ -23,14 +24,23 @@ class Variable {
 		text,
 		number,
 		func,
-		table
+		table,
+		block,
+		boolean
 	}
 
 	Value value;
 	Type type;
 
-	this(){
-		type = Type.null_;
+	this(Type type = Type.null_){
+		this.type = type;
+		if(type == Type.table)
+			value.table = TableValue();
+	}
+
+	this(bool boolean){
+		value.number = boolean ? 1 : 0;
+		type = Type.boolean; 
 	}
 
     this(Variable[] value){
@@ -88,7 +98,7 @@ class Variable {
 		return value.text;
 	}
 
-    TableValue table(){
+    ref TableValue table(){
         checkType(Type.table);
         return value.table;
     }
@@ -97,6 +107,16 @@ class Variable {
         checkType(Type.func);
         return value.func;
     }
+
+	Statement[] block(){
+		checkType(Type.block);
+		return value.block;
+	}
+
+	bool boolean(){
+		checkType(Type.boolean);
+		return value.number != 0;
+	}
 
 	Variable[] opCall(Variable[] params, Context context){
 		return func()(params, context);
@@ -116,6 +136,24 @@ class Variable {
         }
         return result;
     }
+
+	Variable opIndex(string index){
+		if(index.isNumeric && index.to!size_t < table.array.length){
+			return table.array[index.to!size_t];
+		}else{
+			if(index !in table.map)
+				throw new PikeError(`No member named "%s"`.format(index)); 
+			return table.map[index];
+		}
+	}
+
+	void opIndexAssign(Variable variable, string index){
+		if(index.isNumeric && index.to!size_t == table.array.length){
+			table.array ~= variable;
+		}else{
+			table.map[index] = variable;
+		}
+	}
 
     void opOpAssign(string op)(Variable variable){
         mixin("table.array " ~ op ~ "= variable;");

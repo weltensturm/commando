@@ -45,12 +45,16 @@ class Interpreter {
 		try{
         	run(context, statements);
 		}catch(PikeError e){
-			writeln("ERROR");
+			writeln("Exception:");
 			writeln(e.to!string);
+			/+
+			writeln("Context:");
 			if(e.parentContext)
 				writeln(e.parentContext.names);
 			else
 				writeln("No context");
+			writeln(e.trace);
+			+/
 		}
     }
 

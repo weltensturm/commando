@@ -13,16 +13,20 @@ class PikeError: Exception {
         super(error);
     }
 
-    this(string error, Context context, PikeError parent){
+    this(string error, Context context, PikeError parent, string file = __FILE__, size_t line = __LINE__){
         this.parent = parent;
         this.context = context;
-        super(error);
+        super(error, file, line);
     }
 
     override string toString(){
         if(parent)
-            return parent.toString ~ "\n" ~ msg;
-        return msg;
+            return parent.toString ~ "\n  " ~ msg;
+        return "  " ~ msg;
+    }
+
+    string trace(){
+        return super.toString;
     }
 
     Context parentContext(){

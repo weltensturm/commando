@@ -17,7 +17,8 @@ public import
 	
 	pike.interpreter,
         pike.parser,
-        pike.statements,
+        pike.statement,
+	pike.parameter,
 	pike.context,
 	pike.variable,
         pike.builtins,

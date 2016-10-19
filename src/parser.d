@@ -4,17 +4,19 @@ module pike.parser;
 import pike;
 
 
-private struct StatementBuild {
-	string command;
-}
+enum operators = ["=", "+", "-"];
+
 
 class Parser {
 
 	Statement[] statements;
 	string identifier;
 	long line;
+	long lineBlock;
 
-	dstring statement;
+	string[] command;
+
+	char[] build;
 
 	bool inComment;
 
@@ -26,40 +28,70 @@ class Parser {
 	bool indentQueried;
 	bool indentDone;
 
-	this(string identifier){
+	this(string identifier, long line=0){
 		this.identifier = identifier;
+		this.line = line;
 	}
  
 	void finishStatement(){
-		if(statement.strip.length){
-			//writeln("statement ", statement);
-			if(statement.split.length > 1 && statement.split[1].canFind("="))
-				statements ~= new Assignment(statement.to!string, identifier, line);
-			else
-				statements ~= new Call(statement.to!string, identifier, line);	
+		finishParam;
+		if(command.length){
+			if(command.length > 1 && operators.canFind(command[1]))
+				command = [command[1]] ~ command[0] ~ command[2..$];
+			Parameter[] parameters;
+			foreach(part; command[1..$]){
+				if(part.startsWith("$"))
+					parameters ~= new ParameterVariable(part[1..$].idup);
+				else if(part.startsWith("("))
+					parameters ~= new ParameterCall(part[1..$-1].idup, identifier, line-lineBlock);
+				else if(part.startsWith(":"))
+					parameters ~= new ParameterBlock(part[1..$].idup, identifier, line-lineBlock);
+				else
+					parameters ~= new ParameterLiteral(part.idup);
+			}
+			statements ~= new Statement(command[0], parameters, identifier, line-lineBlock);
+			command = [];
 		}
-		statement = "";
+		inBlock = false;
+		lineBlock = 0;
+	}
+
+	void finishParam(){
+		if(inBrace != 0)
+			throw new PikeError("%s(%s): Syntax error: brace level is %s".format(identifier, line, inBrace));
+		build = build.strip;
+		if(build.length){
+			command ~= build.idup;
+			build = [];
+		}
 	}
 
 	void parse(string code){
 
 		foreach(i, dchar c; code ~ "\n"){
 
-			//writeln("CHAR ", c);
-			if(c == '\n')
-				line++;
-
 			if(c == '\n'){
+				line++;
+				if(inBlock || inBrace)
+					lineBlock++;
 				if(!inComment && !inBlock && !inBrace){
 					finishStatement;
 				}
 				inComment = false;
-				if(!inBlock)
-					continue;
 			}
 
 			if(inComment){
 				continue;
+			}
+
+			if(!inBlock && c == '('){
+				if(!inBrace)
+					finishParam;
+				inBrace++;
+			}
+
+			if(!inBlock && c == ')'){
+				inBrace--;
 			}
 
 			if(c == '#'){
@@ -77,42 +109,40 @@ class Parser {
 						indentQueried = true;
 						indentDone = true;
 						indentCheck = indent;
-						//writeln("indent: ", indent);
 					}
 				}else{
 					if(c == '\n'){
-						//writeln("c == '\\n'");
 						if(indent < 0){
-							inBlock = false;
+							lineBlock--;
 							finishStatement;
 						}
 						indentCheck = 0;
 						indentDone = false;
 					}else if(c.isWhite && !indentDone){
-						//writeln("c.isWhite && !indentDone");
 						indentCheck++;
 					}else if(indentCheck < indent){
-						//writeln("indentCheck < indent");
-						inBlock = false;
+						lineBlock--;
 						finishStatement;
 					}
-					if(inBlock && !c.isWhite){
-						//writeln("inBlock && !c.isWhite");
+					if(inBlock && !c.isWhite)
 						indentDone = true;
-					}
 				}
-			}else if(c == ':'){
-				//writeln("started block");
+			}else if(c == ':' && !inBrace){
 				inBlock = true;
 				indent = -1;
 				indentCheck = 0;
 				indentQueried = false;
 				indentDone = false;
+				finishParam;
 			}
 
-			statement ~= c;
+			build ~= c;
 
-			if(i == code.length && statement.length)
+			if((c == ')' || c.isWhite) && !inBrace && !inBlock){
+				finishParam;
+			}
+
+			if(i == code.length)
 				finishStatement;
 		}
 

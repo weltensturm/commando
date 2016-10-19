@@ -19,28 +19,39 @@ class Context {
 		this.parent = parent;
 	}
 
-	void set(string name, Variable variable){
+	void set(string name, Variable variable, bool force=false){
 		auto p = this;
-		while(p && name !in p.variables)
+		while(!force && p && name !in p.variables)
 			p = p.parent;
-		if(!p)
+		if(force || !p)
 			p = this;
 		p.variables[name] = variable;
 	}
 
-	Variable get(string name){
-		if(name in variables)
-			return variables[name];
-		if(parent)
-			return parent.get(name);
-		int count = 1;
+	Variable get(string name, bool throw_=true){
+		string[] index;
 		Variable var;
-		foreach(i; imported){
-			auto ivar = i.get(name);
-			if(ivar && var)
-				throw new PikeError(`Ambiguous name "%s"`.format(name));
-			else if(ivar)
-				var = ivar;
+		if(name.canFind(".")){
+			index = name.split(".")[1..$];
+			name = name.split(".")[0];
+		}
+		if(name in variables)
+			var = variables[name];
+		else {
+			foreach(i; imported){
+				auto ivar = i.get(name, false);
+				if(ivar && var)
+					throw new PikeError(`Ambiguous name "%s"`.format(name));
+				else if(ivar)
+					var = ivar;
+			}
+			if(parent && !var)
+				return parent.get(name, throw_);
+		}
+		if(!var && throw_)
+			throw new PikeError(`Could not resolve "%s"`.format(name));
+		foreach(sub; index){
+			var = var[sub];
 		}
 		return var;
 	}
@@ -62,9 +73,9 @@ class Context {
 	}
 
 	string names(){
-		auto s = "%s:\n".format(name);
+		auto s = "  %s:\n".format(name);
         foreach(name, var; variables)
-            s ~= "\t%s = %s\n".format(name, var);
+            s ~= "    %s = %s\n".format(name, var);
 		foreach(i; imported)
 			s ~= i.names;
 		if(parent)

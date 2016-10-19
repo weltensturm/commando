@@ -9,11 +9,8 @@ void main(){
 	auto pike = new Interpreter;
 	loadEcho(pike);
 	loadBuiltins(pike);
-	/+
-	foreach(i; 1..200000){
-		pike.run("test/basic.p");
-		writeln(i);
-	}
-	+/
 	pike.load("test/basic.p");
+	pike.load("test/import.p");
+	pike.load("test/tables.p");
+	pike.load("test/if.p");
 }
