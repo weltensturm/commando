@@ -1,52 +1,88 @@
 
-module pike.interpreter;
+module commando.interpreter;
 
-import pike;
+import commando;
 
-alias FunctionReturn = Variable[]; 
-alias Function = FunctionReturn delegate(Variable[], Context);
+alias FunctionReturn = Variable[];
+alias Function = FunctionReturn delegate(Parameter[], Variable);
+
+
+auto nothing(){
+	return FunctionReturn.init;
+}
+
+
+Variable context(Variable parent){
+	auto context = new Variable(Variable.Type.table);
+	context["__context"] = context;
+	if(parent)
+		context["__index"] = parent;
+	context["__imported"] = new Variable(Variable.Type.table);
+	return context;
+}
+
+
+void printTable(Variable variable, size_t level=0){
+	foreach(k, v; variable){
+		if(v.type == Variable.Type.table){
+			if(v == variable)
+				writeln(' '.repeat(level*4), k, " <-");
+			else {
+				writeln(' '.repeat(level*4), k, ":");
+				printTable(v, level+1);
+			}
+		}else
+			writeln(' '.repeat(level*4), k, " = ", v);
+	}
+}
 
 
 class Interpreter {
 
-	Context[string] contexts;
+	Variable global;
 
-    Statement[][string] loaded;
+	Statement[][string] loaded;
+	Variable[string] loadedContexts;
 
-    this(){
-		contexts["builtins"] = new Context("builtins", null);
-    }
+	this(){
+		global = context(null);
+		global["__global"] = global;
+	}
 
-    void run(Context context, Statement statement){
-		statement.run(this, context);
-    }
+	void run(Variable context, Statement statement){
+		statement.run(context);
+	}
 
-	void run(Context context, Statement[] statements){
-        foreach(s; statements)
-            run(context, s);
+	void run(Variable context, Statement[] statements){
+		foreach(s; statements)
+			run(context, s);
 	}
 
 	void run(string path){
 		if(path !in loaded)
 			load(path);
+		/+
 		else
-			run(contexts[path], loaded[path]);
+			run(global["__imported"][path], loaded[path]);
+		+/
 	}
 
-    void load(string path){
-		assert(path != "builtins", `"builtins" is already in use`);
-        if(path in loaded)
-            return;
-		auto context = new Context(path, null);
-		context.imported ~= contexts["builtins"];
-		contexts[path] = context;
-        auto statements = parse(path, path.readText);
-        loaded[path] = statements;
+	Variable load(string path){
+		if(path in loadedContexts)
+			return loadedContexts[path];
+		auto context = .context(global);//new Context(path, global);
+		//global["__imported"] ~= context;
 		try{
-        	run(context, statements);
-		}catch(PikeError e){
+			auto statements = parse(path, path.readText);
+			loaded[path] = statements;
+			loadedContexts[path] = context;
+			run(context, statements);
+		}catch(CommandoError e){
 			writeln("Exception:");
+			void delegate(CommandoError) w;
+			w = (CommandoError e){ writeln(e.trace); if(e.parent) w(e.parent.to!CommandoError); };
 			writeln(e.to!string);
+			w(e.to!CommandoError);
 			/+
 			writeln("Context:");
 			if(e.parentContext)
@@ -56,7 +92,8 @@ class Interpreter {
 			writeln(e.trace);
 			+/
 		}
-    }
+		return context;
+	}
 
 	private Statement[][string] parsed;
 

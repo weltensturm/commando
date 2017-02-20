@@ -1,16 +1,17 @@
 
-module pike.main;
+module commando.main;
 
-import pike;
+import commando;
 
+void main(){}
 
-
-void main(){
-	auto pike = new Interpreter;
-	loadEcho(pike);
-	loadBuiltins(pike);
-	pike.load("test/basic.p");
-	pike.load("test/import.p");
-	pike.load("test/tables.p");
-	pike.load("test/if.p");
+unittest {
+	auto commando = new Interpreter;
+	loadEcho(commando);
+	loadBuiltins(commando);
+	commando.load("test/basic.cm");
+	commando.load("test/import.cm");
+	commando.load("test/tables.cm");
+	commando.load("test/if.cm");
+	commando.load("test/comparison.cm");
 }

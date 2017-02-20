@@ -1,16 +1,16 @@
 
-module pike.examples.embed;
+module commando.examples.embed;
 
-import pike;
+import commando;
 
 
 
 
 void main(){
 
-        auto pike = new Pike;
+		auto commando = new commando;
 
-        
+		
 
 
 }

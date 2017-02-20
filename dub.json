@@ -1,6 +1,7 @@
 {
-	"name" : "pike",
-	"description" : "Hello World - A minimal DUB bundle.",
+	"name" : "commando",
+	"description" : "Yet anoter scripting language.",
+	
 	"dependencies" : {
 	}
 }

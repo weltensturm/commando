@@ -1,25 +1,31 @@
 
-module pike;
+module commando;
 
 public import
-        
+
 	std.file,
 	std.uni,
+	std.math,
 	std.array,
 	std.string,
 	std.algorithm,
 	std.stdio,
-        std.conv,
+	std.conv,
 	std.traits,
 	std.functional,
 	std.typecons,
 	std.range,
-	
-	pike.interpreter,
-        pike.parser,
-        pike.statement,
-	pike.parameter,
-	pike.context,
-	pike.variable,
-        pike.builtins,
-	pike.pikeError;
+
+	commando.interpreter,
+	commando.parser,
+	commando.statement,
+	commando.parameter,
+	commando.context,
+	commando.variable,
+	commando.builtins.all,
+	commando.builtins.arithmetic,
+	commando.builtins.comparison,
+	commando.builtins.constants,
+	commando.builtins.container,
+	commando.builtins.language,
+	commando.commandoError;

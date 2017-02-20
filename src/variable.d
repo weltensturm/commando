@@ -1,7 +1,7 @@
-module pike.variable;
+module commando.variable;
 
 
-import pike;
+import commando;
 
 
 class Variable {
@@ -40,13 +40,13 @@ class Variable {
 
 	this(bool boolean){
 		value.number = boolean ? 1 : 0;
-		type = Type.boolean; 
+		type = Type.boolean;
 	}
 
-    this(Variable[] value){
-        this.value.table = TableValue(value);
-        type = Type.table;
-    }
+	this(Variable[] value){
+		this.value.table = TableValue(value);
+		type = Type.table;
+	}
 
 	this(string value){
 		this.value.text = value;
@@ -63,30 +63,14 @@ class Variable {
 		type = Type.func;
 	}
 
-	this(FunctionReturn delegate(Variable[]) value){
-		this((Variable[] v, Context c){
-			return value(v);
-		});
+	this(FunctionReturn function(Parameter[], Variable) value){
+		this(value.toDelegate);
 	}
 
-	this(void delegate(Variable[]) value){
-		this((Variable[] v, Context c){
-			value(v);
-			return FunctionReturn.init;
-		});
+	void checkType(Type type){
+		if(type != this.type)
+			throw new CommandoError("Type mismatch: expected %s, got %s".format(type, this.type).chomp("_"));
 	}
-
-	this(void delegate(Variable[], Context) value){
-		this((Variable[] v, Context c){
-			value(v, c);
-			return FunctionReturn.init;
-		});
-	}
-
-    void checkType(Type type){
-        if(type != this.type)
-            throw new PikeError("Type mismatch: expected %s, got %s".format(type, this.type).chomp("_"));
-    }
 
 	double number(){
 		checkType(Type.number);
@@ -98,15 +82,15 @@ class Variable {
 		return value.text;
 	}
 
-    ref TableValue table(){
-        checkType(Type.table);
-        return value.table;
-    }
+	ref TableValue table(){
+		checkType(Type.table);
+		return value.table;
+	}
 
-    Function func(){
-        checkType(Type.func);
-        return value.func;
-    }
+	Function func(){
+		checkType(Type.func);
+		return value.func;
+	}
 
 	Statement[] block(){
 		checkType(Type.block);
@@ -118,36 +102,56 @@ class Variable {
 		return value.number != 0;
 	}
 
-	Variable[] opCall(Variable[] params, Context context){
+	Variable[] opCall(Parameter[] params, Variable context){
 		return func()(params, context);
 	}
 
-    int opApply(int delegate(Variable, Variable) dg){
-        int result = 0;
-        foreach(i, v; table.array){
-            result = dg(new Variable(i), v);
-            if(result)
-                return result;
-        }
-        foreach(k, v; table.map){
-            result = dg(new Variable(k), v);
-            if(result)
-                return result;
-        }
-        return result;
-    }
+	int opApply(int delegate(Variable, Variable) dg){
+		int result = 0;
+		if(type == Type.text){
+			foreach(i, v; text){
+				result = dg(new Variable(i), new Variable(v.to!string));
+				if(result)
+					return result;
+			}
+		}else{
+			foreach(i, v; table.array){
+				result = dg(new Variable(i), v);
+				if(result)
+					return result;
+			}
+			foreach(k, v; table.map){
+				result = dg(new Variable(k), v);
+				if(result)
+					return result;
+			}
+		}
+		return result;
+	}
 
 	Variable opIndex(string index){
 		if(index.isNumeric && index.to!size_t < table.array.length){
 			return table.array[index.to!size_t];
 		}else{
-			if(index !in table.map)
-				throw new PikeError(`No member named "%s"`.format(index)); 
+			if(index in table.map)
+				return table.map[index];
+			if("__imported" in table.map){
+				foreach(_, imp; table.map["__imported"]){
+					if(index in imp.table.map)
+						return imp[index];
+				}
+			}
+			if("__index" in table.map)
+				return table.map["__index"][index];
+			/+
+			this[index] = new Variable;
 			return table.map[index];
+			+/
+			throw new CommandoError(`Could not resolve "%s"`.format(index));
 		}
 	}
 
-	void opIndexAssign(Variable variable, string index){
+	void opIndexAssign()(Variable variable, string index){
 		if(index.isNumeric && index.to!size_t == table.array.length){
 			table.array ~= variable;
 		}else{
@@ -155,9 +159,19 @@ class Variable {
 		}
 	}
 
-    void opOpAssign(string op)(Variable variable){
-        mixin("table.array " ~ op ~ "= variable;");
-    }
+	void opIndexAssign(T)(T variable, string index){
+		opIndexAssign(new Variable(variable), index);
+	}
+
+	void opOpAssign(string op)(Variable variable){
+		mixin("table.array " ~ op ~ "= variable;");
+	}
+
+	/+
+	Proxy opDispatch(string name)(){
+		return new Proxy(this, name);
+	}
+	+/
 
 	override string toString(){
 		if(type == Type.text){
@@ -167,11 +181,13 @@ class Variable {
 		}else if(type == Type.func){
 			return "function:%s".format(value.func.ptr);
 		}else if(type == Type.null_){
-            return "null";
-        }else if(type == Type.table){
-            return "table:%s".format(value.table.array.ptr);
-        }else{
-			throw new PikeError("Could not convert %s to string".format(type));
+			return "null";
+		}else if(type == Type.table){
+			return "table:%s&%s".format(value.table.array.ptr, cast(void*)value.table.map);
+		}else if(type == Type.boolean){
+			return boolean.to!string;
+		}else{
+			throw new CommandoError("Could not convert %s to string".format(type));
 		}
 	}
 }

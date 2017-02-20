@@ -1,47 +1,44 @@
 
-module pike.statement;
+module commando.statement;
 
-import pike;
+import commando;
 
 
 class Statement {
 
-    string contextIdentifier;
-    long line;
-
-	string command;
+	string contextIdentifier;
+	long line;
 
 	Parameter[] parameters;
 
-	this(string command, Parameter[] parameters, string contextIdentifier, long line){
-        this.contextIdentifier = contextIdentifier;
-        this.line = line;
-        this.command = command;
-        this.parameters = parameters;
+	this(Parameter[] parameters, string contextIdentifier, long line){
+		this.contextIdentifier = contextIdentifier;
+		this.line = line;
+		this.parameters = parameters;
 	}
 
-    FunctionReturn run(Interpreter pike, Context context){
-        try{
-            auto var = context.get(command);
-            if(var.type == Variable.Type.func)
-                return var(parameters.map!(a => a.evaluate(pike, context)).array, context);
-            else
-                return [var];
-        }catch(PikeError e){
-            string[] paramDesc;
-            foreach(param; parameters){
-                try{
-                    paramDesc ~= param.evaluate(pike, context).to!string;
-                }catch{
-                    paramDesc ~= "(error)";
-                }
-            }
-            throw new PikeError("%s(%s): %s %s".format(contextIdentifier, line, command, paramDesc.join(" ")), context, e);
-        }
-    }
-
-	override string toString(){
-		return "call %s".format(command);
+	FunctionReturn run(Variable context){
+		try{
+			auto var = parameters[0].evaluate(context);
+			if(!var || var.type == Variable.Type.null_)
+				throw new CommandoError("Cannot call null");
+			else if(var.type == Variable.Type.func)
+				return var(parameters[1..$], context);
+			else
+				return [var];
+		}catch(CommandoError e){
+			//writeln("STATEMENT ", command);
+			//context.printTable;
+			string[] paramDesc;
+			foreach(param; parameters[1..$]){
+				try{
+					paramDesc ~= param.statement;
+				}catch(Throwable){
+					paramDesc ~= param.to!string;
+				}
+			}
+			throw new CommandoError("%s(%s): %s".format(contextIdentifier, line, paramDesc.join(" ")), context, e);
+		}
 	}
 
 }

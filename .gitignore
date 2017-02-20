@@ -1,3 +1,4 @@
 .dub
-pike
-pike.exe
+commando
+commando.exe
+libcommando.a

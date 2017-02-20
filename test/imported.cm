@@ -1,0 +1,4 @@
+
+
+hello = fn:
+	echo "hello test"

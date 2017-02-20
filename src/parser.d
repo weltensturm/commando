@@ -1,11 +1,57 @@
 
-module pike.parser;
+module commando.parser;
 
-import pike;
+import commando;
 
 
-enum operators = ["=", "+", "-"];
+enum operators = [
+	/// Binary for now, this also is precedence
+	["."],
+	["*", "/"],
+	["+", "-"],
+	[">=", "<=", ">", "<"],
+	["and", "or"],
+	["=="],
+	[":"],
+	["="]
+];
 
+
+string operatorJoin(string left, string right, string op){
+	return "(" ~ op ~ " " ~ left ~ " " ~ right ~ ")";
+}
+
+string[] resolveOperators(string[] command, size_t level=0){
+	foreach(op; operators){
+		foreach(i, part; command){
+			if(op.canFind(part)){
+				string[] pre, post;
+				if(i == 0 || i+1 >= command.length)
+					throw new Exception("");
+				if(i > 1)
+					pre = command[0..i-1];
+				if(i < command.length)
+					post = command[i+2..$];
+				if(part != "=")
+					return  resolveOperators(pre ~ operatorJoin(command[i-1], command[i+1], part) ~ post, level+1);
+				else
+					return  ["=", command[i-1]] ~ ["(" ~ resolveOperators([command[i+1]] ~ post).join(" ") ~ ")"];
+			}
+		}
+	}
+	return command;
+}
+
+enum CharType {
+	operator,
+	text
+}
+
+CharType charType(dchar c){
+	if(".*/+-><=:".canFind(c))
+		return CharType.operator;
+	return CharType.text;
+}
 
 class Parser {
 
@@ -18,9 +64,13 @@ class Parser {
 
 	char[] build;
 
+	CharType currentType = CharType.text;
+
 	bool inComment;
 
 	int inBrace;
+
+	bool inString;
 
 	bool inBlock;
 	int indent;
@@ -32,24 +82,35 @@ class Parser {
 		this.identifier = identifier;
 		this.line = line;
 	}
- 
+
 	void finishStatement(){
 		finishParam;
 		if(command.length){
-			if(command.length > 1 && operators.canFind(command[1]))
-				command = [command[1]] ~ command[0] ~ command[2..$];
+			if(command.length > 1){
+				if(!operators.reduce!((a, b) => a ~ b).canFind(command[0])){
+					try
+						command = command.resolveOperators;
+					catch(Exception e)
+						throw new CommandoError("%s(%s): Syntax error: missing argument for operator\n\t%s".format(identifier, line, command));
+				}
+			}
+			//writeln("COMMAND ", command);
 			Parameter[] parameters;
-			foreach(part; command[1..$]){
-				if(part.startsWith("$"))
-					parameters ~= new ParameterVariable(part[1..$].idup);
+			foreach(part; command){
+				if(!part.length)
+					continue;
+				else if(part.isNumeric)
+					parameters ~= new ParameterLiteral(part.to!double);
+				else if(part.startsWith("\""))
+					parameters ~= new ParameterLiteral(part[1..$-1].idup);
 				else if(part.startsWith("("))
 					parameters ~= new ParameterCall(part[1..$-1].idup, identifier, line-lineBlock);
 				else if(part.startsWith(":"))
 					parameters ~= new ParameterBlock(part[1..$].idup, identifier, line-lineBlock);
 				else
-					parameters ~= new ParameterLiteral(part.idup);
+					parameters ~= new ParameterVariable(part.idup);
 			}
-			statements ~= new Statement(command[0], parameters, identifier, line-lineBlock);
+			statements ~= new Statement(parameters, identifier, line-lineBlock);
 			command = [];
 		}
 		inBlock = false;
@@ -58,10 +119,11 @@ class Parser {
 
 	void finishParam(){
 		if(inBrace != 0)
-			throw new PikeError("%s(%s): Syntax error: brace level is %s".format(identifier, line, inBrace));
+			throw new CommandoError("%s(%s): Syntax error: brace level is %s\n\t%s".format(identifier, line, inBrace, build));
 		build = build.strip;
 		if(build.length){
 			command ~= build.idup;
+			//writeln("PARAM ", build);
 			build = [];
 		}
 	}
@@ -84,17 +146,23 @@ class Parser {
 				continue;
 			}
 
-			if(!inBlock && c == '('){
+			if(!inString && !inBlock && c == '('){
 				if(!inBrace)
 					finishParam;
 				inBrace++;
 			}
 
-			if(!inBlock && c == ')'){
+			if(!inString && !inBlock && c == ')'){
 				inBrace--;
 			}
 
-			if(c == '#'){
+			if(!inString && !inBlock && c == '\"')
+				inString = true;
+			else if(inString && !inBlock && c == '\"'){
+				inString = false;
+			}
+
+			if(!inString && c == '#'){
 				inComment = true;
 				continue;
 			}
@@ -127,7 +195,7 @@ class Parser {
 					if(inBlock && !c.isWhite)
 						indentDone = true;
 				}
-			}else if(c == ':' && !inBrace){
+			}else if(c == ':' && !inString && !inBrace){
 				inBlock = true;
 				indent = -1;
 				indentCheck = 0;
@@ -136,9 +204,14 @@ class Parser {
 				finishParam;
 			}
 
+			if(!inString && !inBrace && !inBlock && c.charType != currentType){
+				currentType = c.charType;
+				finishParam;
+			}
+
 			build ~= c;
 
-			if((c == ')' || c.isWhite) && !inBrace && !inBlock){
+			if(!inString && !inBrace && !inBlock && (c == ')' || c.isWhite || c == '\"')){
 				finishParam;
 			}
 
