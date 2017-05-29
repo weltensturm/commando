@@ -1,7 +1,7 @@
 {
 	"name" : "commando",
 	"description" : "Yet anoter scripting language.",
-	
+	"targetType": "sourceLibrary",
 	"dependencies" : {
 	}
 }

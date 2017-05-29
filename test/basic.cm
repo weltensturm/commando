@@ -1,56 +1,61 @@
 
 
-pass = fn a:
-	return a
+check
+    true
+    ==
+    true
+
+check true
+    == not false
+
+range 10 | each $i a: check i == a
+
+check 1 + 2 == 3
 
 
-echo 1 + 2
+check 0.3 == 3/10
 
+check 512.3 + 2 == 514+3/10
 
-each a in (range 10): echo a
+check "aa" == "aa"
 
-each (range 20):
-	echo "test with pancakes"
+range 20 | each:
+    text = "test with pancakes"
 
-	param = fn x:
-		echo x
+    indent = $a:
+        check a == "aa"
+        b = a
+        inner = $:
+            return a
+        check (inner) == a
+        return b
 
-	param "test"
-
-	indent = fn a:
-		b = a
-		inner = fn:
-			echo "inner worked" a
-		inner
-		echo "sup guys" b
-		return b
-
-	echo (indent "aa")
-
-	echo (512.3 + 2)
-
+    check (indent "aa") == "aa"
 
 num = 1
 
-add = fn:
-	num = num + 1
-
 test = (
-	echo "asdf"
-	#test
-	return 1
+    text = "asdf"
+    #test
+    return num
 )
 
-add
-echo 1 num
-add
-echo 2 num
-add
-echo 3 num
-add
-echo 4 num
+check test == 1
 
-echo "hi" (range 200) "there"
+add = $: num + 1
+check (add) == 2
+num = (add)
+check (add) == 3
 
-each i in (range 2000):
-	echo i
+checkParam = $a b c:
+    check a == "hi"
+    check (length b) == 200
+    check c == "there"
+
+checkParam "hi" (range 200) "there"
+
+r2k = range 2000 | each $a: a*2
+
+each r2k $k v:
+    check k == v/2
+

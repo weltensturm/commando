@@ -1,4 +1,4 @@
 
 
-hello = fn:
-	echo "hello test"
+hello = $a:
+	echo "hello test" a

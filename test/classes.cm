@@ -1,19 +1,19 @@
 
+constructor = raw f:
+    echo "f" f
+    fn: data f
 
-Base = class:
+Car = constructor:
 
-	x = 5
+    a = "test"
 
-	function = fun x:
-		echo $x
-
-
-Child = class Base:
-	
-	function = fun x:
-		echo asdf
+    b = fn:
+        echo a
 
 
-instance = Child
+car = Car
+echo car.a
+car.b
 
-instance.x
+
+

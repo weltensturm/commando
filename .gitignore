@@ -1,4 +1,10 @@
 .dub
 commando
-commando.exe
+*.exe
 libcommando.a
+.idea
+trace.def
+vgcore.*
+.settings
+commando-test-library
+.project

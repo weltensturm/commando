@@ -1,0 +1,13 @@
+
+fold = $d f:
+    a = null
+    each d $v:
+        a = a and (f a v) or v
+    a
+
+x = range 21
+  | each $a: a*2
+  | fold $a b: a+b
+
+
+check x == 420

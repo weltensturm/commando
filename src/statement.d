@@ -8,37 +8,44 @@ class Statement {
 
 	string contextIdentifier;
 	long line;
+	string lineText;
 
 	Parameter[] parameters;
 
-	this(Parameter[] parameters, string contextIdentifier, long line){
+	this(Parameter[] parameters, string contextIdentifier, long line, string lineText){
 		this.contextIdentifier = contextIdentifier;
 		this.line = line;
 		this.parameters = parameters;
+		this.lineText = lineText;
 	}
 
-	FunctionReturn run(Variable context){
+	void precompute(Stack stack){
 		try{
-			auto var = parameters[0].evaluate(context);
-			if(!var || var.type == Variable.Type.null_)
-				throw new CommandoError("Cannot call null");
-			else if(var.type == Variable.Type.func)
-				return var(parameters[1..$], context);
-			else
-				return [var];
+			foreach(p; parameters)
+				p.precompute(stack);
 		}catch(CommandoError e){
-			//writeln("STATEMENT ", command);
-			//context.printTable;
-			string[] paramDesc;
-			foreach(param; parameters[1..$]){
-				try{
-					paramDesc ~= param.statement;
-				}catch(Throwable){
-					paramDesc ~= param.to!string;
-				}
+			throw new CommandoError("%s(%s): %s".format(contextIdentifier, line, lineText), stack, e);
+		}
+	}
+
+	string[] names(Stack stack){
+		return parameters.map!(a => a.names(stack)).join;
+	}
+
+	FunctionReturn run(Stack stack){
+		try{
+			auto var = parameters[0].get(stack);
+			if(var.type == Variable.Type.func)
+				return var(parameters[1..$], stack);
+			else {
+				if(parameters.length > 1)
+					throw new CommandoError("Cannot call %s with parameters".format(var.type));
+				return [var];
 			}
-			throw new CommandoError("%s(%s): %s".format(contextIdentifier, line, paramDesc.join(" ")), context, e);
+		}catch(CommandoError e){
+			throw new CommandoError("%s(%s): %s".format(contextIdentifier, line, lineText), stack, e);
 		}
 	}
 
 }
+

@@ -4,56 +4,73 @@ module commando.interpreter;
 import commando;
 
 alias FunctionReturn = Variable[];
-alias Function = FunctionReturn delegate(Parameter[], Variable);
-
+alias Function = FunctionReturn delegate(Parameter[], Stack);
 
 auto nothing(){
-	return FunctionReturn.init;
+	return [Variable()];
 }
 
 
-Variable context(Variable parent){
-	auto context = new Variable(Variable.Type.table);
+Variable context(){
+	auto context = Variable(Variable.Type.data);
 	context["__context"] = context;
-	if(parent)
-		context["__index"] = parent;
-	context["__imported"] = new Variable(Variable.Type.table);
+	context["__imported"] = Variable(Variable.Type.data);
 	return context;
 }
 
 
-void printTable(Variable variable, size_t level=0){
+Variable context(Variable parent){
+	auto context = .context;
+	context["__index"] = parent;
+	return context;
+}
+
+
+void printData(Variable variable, size_t level=1, Variable[] datas=(Variable[]).init){
+	if(level == 1)
+		writeln("[");
 	foreach(k, v; variable){
-		if(v.type == Variable.Type.table){
+		if(v.type == Variable.Type.data){
 			if(v == variable)
-				writeln(' '.repeat(level*4), k, " <-");
+				writeln("|   ".repeat(level).join, k, " = this");
 			else {
-				writeln(' '.repeat(level*4), k, ":");
-				printTable(v, level+1);
+				writeln("|   ".repeat(level).join, k, ": ", variable);
+				if(!datas.canFind(v))
+					printData(v, level+1, datas ~= v);
 			}
 		}else
-			writeln(' '.repeat(level*4), k, " = ", v);
+			writeln("|   ".repeat(level).join, k, " = ", v);
 	}
+	if(level == 1)
+		writeln("]");
 }
+
+void printStack(Stack stack){
+	writeln("Stack:");
+	foreach(idx, n; stack.names)
+		writeln("%s   %s = %s".format(idx, n, stack.stack[idx]));
+}
+
 
 
 class Interpreter {
 
-	Variable global;
-
+	Stack base;
 	Statement[][string] loaded;
-	Variable[string] loadedContexts;
+	Stack[string] loadedContexts;
 
-	this(){
-		global = context(null);
-		global["__global"] = global;
+	void init(void function(Stack)[] preload){
+		base = new Stack;
+		base.push([]);
+		foreach(dg; preload)
+			dg(base);
 	}
 
-	void run(Variable context, Statement statement){
+	void run(Stack context, Statement statement){
 		statement.run(context);
 	}
 
-	void run(Variable context, Statement[] statements){
+	void run(Stack context, Statement[] statements){
 		foreach(s; statements)
 			run(context, s);
 	}
@@ -67,32 +84,37 @@ class Interpreter {
 		+/
 	}
 
-	Variable load(string path){
+	Stack load(string path){
 		if(path in loadedContexts)
 			return loadedContexts[path];
-		auto context = .context(global);//new Context(path, global);
-		//global["__imported"] ~= context;
+		auto stack = base.dup;
 		try{
 			auto statements = parse(path, path.readText);
 			loaded[path] = statements;
-			loadedContexts[path] = context;
-			run(context, statements);
+			loadedContexts[path] = stack;
+			stack.prepush;
+			foreach(a; statements.map!(s => s.names(stack)).join)
+				stack.ensureIndex(a);
+			foreach(s; statements)
+				s.precompute(stack);
+			auto names = stack.prepop;
+			stack.precompute = false;
+			stack.push(names);
+			run(stack, statements);
+			stack.pop;
 		}catch(CommandoError e){
 			writeln("Exception:");
-			void delegate(CommandoError) w;
-			w = (CommandoError e){ writeln(e.trace); if(e.parent) w(e.parent.to!CommandoError); };
 			writeln(e.to!string);
-			w(e.to!CommandoError);
-			/+
-			writeln("Context:");
-			if(e.parentContext)
-				writeln(e.parentContext.names);
-			else
-				writeln("No context");
-			writeln(e.trace);
-			+/
+			debug(Exception){
+				void delegate(CommandoError) w;
+				w = (CommandoError e){ writeln(e.trace); if(e.parent) w(e.parent.to!CommandoError); };
+				w(e.to!CommandoError);
+			}
+			debug(Stack)
+				printStack(e.context);	
+			
 		}
-		return context;
+		return stack;
 	}
 
 	private Statement[][string] parsed;
@@ -108,4 +130,15 @@ class Interpreter {
 		return statements;
 	}
 
+}
+
+
+auto iter(alias dg, T)(T start){
+	struct Iter {
+		T current;
+		bool empty(){ return current is null; }
+		void popFront(){ current = dg(current).to!T; }
+		T front(){ return current; }
+	}
+	return Iter(start);
 }

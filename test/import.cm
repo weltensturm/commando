@@ -1,4 +1,6 @@
 
 import "test/imported.cm"
 
-hello
+a = 9
+
+hello a

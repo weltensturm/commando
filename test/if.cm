@@ -7,9 +7,13 @@ else:
 if true:
 	echo "all is good"
 
-test = (fn:
+test = $:
 	if true:
 		return 1
-	error "should not be here")
+	error "should not be here"
 
 echo (test)
+
+
+check (null and 1 or 2) == 2
+

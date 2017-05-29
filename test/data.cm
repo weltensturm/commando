@@ -1,0 +1,28 @@
+
+
+party = data:
+	5
+	test = 1
+	func = $:
+		"testfunc"
+	another = test
+	num = 2
+
+
+test = data:
+	p = party
+	inner = data:
+		num = 1
+
+each test $n i:
+	echo "MEMBER" n i
+	each i $n' i':
+		echo "SUB" n' i'
+
+check test.p.test == 1
+check (test.p.func) == "testfunc"
+
+
+op_test = 1.5 + party.num + test.inner.num
+
+check op_test == 1.5+2+1

@@ -1,18 +1,24 @@
 
 
-p = html attrs content:
-	<p $attrs>
-		$content
-	</p>
+p = $text:
+    "<p> ${(text)} </p>"
 
 
-div = html attrs content:
-	<div $attrs>
-		$content
-	</div>
+div = $attributes inner:
+    "<div " + attributes + ">"
+        + (inner)
+        + "</div>"
+    "<div ${attributes}>
+    	${(inner)}
+	</div>"
 
 
-layout = fun:
-	div col-lg-6:
-		p this is a test
+lg = $a: "class=\"col-lg-${a}\""
+
+
+layout = $:
+	div [(lg 6)]:
+		p:
+			"this is a test"
+
 
