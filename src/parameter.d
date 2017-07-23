@@ -62,11 +62,11 @@ class ParameterVariable: Parameter {
 	}
 
 	override Variable get(Stack stack){
-		return stack.get(stackIndex);
+		return stack[stackIndex];
 	}
 
 	override void set(Stack stack, Variable var){
-		stack.set(stackIndex, var);
+		stack[stackIndex] = var;
 	}
 
 	override void precompute(Stack stack){
@@ -173,6 +173,8 @@ class ParameterFunction: Parameter {
 
 	string[] names;
 	Stack.Pos[] argTargets;
+	Stack.Pos[] blockTargets;
+	Variable[] parameterCache;
 
 	this(bool isFunction, string[] names, string block, string identifier, long line){
 		this.statement = block;
@@ -189,9 +191,10 @@ class ParameterFunction: Parameter {
 			debug(Parameter){
 				writeln("CALL ", isFunction ? "FN " : "BLOCK ", names, " \"", statement, "\"");
 			}
-        	if(argTargets.length != params.length)
-        		throw new CommandoError("Expected %s parameters, got %s".format(argTargets.length, params.length));
-        	stack.push(argTargets.enumerate.map!(a => params[a[0]].get(caller)).array, names.length-argTargets.length);
+			checkLength(argTargets.length, params.length);
+			foreach(i, ref v; parameterCache)
+				v = params[i].get(caller);
+        	stack.push(parameterCache, (names.length-argTargets.length).to!int);
             auto r = run(statements, stack, isFunction);
             stack.pop;
             return r;
@@ -202,31 +205,19 @@ class ParameterFunction: Parameter {
 		debug(Parameter){
 			writeln("COLLECT ", isFunction ? "FN " : "BLOCK ", names, " \"", statement, "\"");
 		}
-		stack.push(names.length);
-		auto oldAssign = stack[assignIndex];
-		stack[assignIndex] = Variable((Parameter[] params, Stack stack){
-			checkLength(2, params.length);
-			string name;
-			auto v = params[1].get(stack);
-			if(auto n = cast(ParameterAssignmentTarget)params[0]){
-				name = n.name;
-				n.set(stack, v);
-			}else
-				name = params[0].get(stack).text;
-			named(name, v);
-			return nothing;
-		});
-
+		if(argTargets.length)
+			throw new CommandoError("Cannot collect parametrized function (for now)");
+		stack.push(names.length.to!int);
 		foreach(statement; statements){
 			auto r = statement.run(stack)[0];
 			if(r)
 				unnamed(r);
 			if(stack.checkReturn(false))
-				return;
+				break;
 		}
-
+		foreach(i; argTargets.length..names.length)
+			named(names[i], stack[blockTargets[i]]);
 		stack.pop;
-		stack[assignIndex] = oldAssign;
 	}
 
 	override void set(Stack context, Variable var){
@@ -241,9 +232,15 @@ class ParameterFunction: Parameter {
 			stack.ensureIndex(a);
 		foreach(s; statements)
 			s.precompute(stack);
+		stack.currentNames((names, indices){
+			foreach(i; argTargets.length..names.length){
+				blockTargets ~= indices[i];
+			}
+		});
 		auto names = stack.prepop;
 		assert(names.startsWith(this.names), "!%s.startsWith(%s)".format(this.names, names));
 		this.names = names;
+		parameterCache.length = argTargets.length;
 	}
 
 }

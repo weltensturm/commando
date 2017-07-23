@@ -54,7 +54,7 @@ checkParam = $a b c:
 
 checkParam "hi" (range 200) "there"
 
-r2k = range 2000 | each $a: a*2
+r2k = range 2000 | map $a: a*2
 
 each r2k $k v:
     check k == v/2

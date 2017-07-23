@@ -3,22 +3,41 @@ module commando.globals.container;
 import commando;
 
 
+Stack.Pos appendIndex;
+
+
 void container(Stack stack){
 
     stack["each"] = Variable((Parameter[] params, Stack stack){
-    	auto func = params[$-1].get(stack).func;
+    	auto func = params[$-1].get(stack);
 		auto count = params[$-1].to!ParameterFunction.argTargets.length;
 		Parameter[] keyvalue;
 		keyvalue.length = count;
-        auto res = Variable(Variable.Type.data);
+        auto res = Variable();
     	foreach(key, value; params[0].get(stack)){
 			if(keyvalue.length > 0)
 				keyvalue[$-1] = new ParameterDynamic(value);
 			if(keyvalue.length > 1)
 				keyvalue[0] = new ParameterDynamic(key);
-			res ~= func(keyvalue, stack)[0];
+			res = func(keyvalue, stack)[0];
     	}
     	return [res];
+    });
+
+    stack["map"] = Variable((Parameter[] params, Stack stack){
+        auto func = params[$-1].get(stack);
+        auto count = params[$-1].to!ParameterFunction.argTargets.length;
+        Parameter[] keyvalue;
+        keyvalue.length = count;
+        auto res = Variable(Variable.Type.data);
+        foreach(key, value; params[0].get(stack)){
+            if(keyvalue.length > 0)
+                keyvalue[$-1] = new ParameterDynamic(value);
+            if(keyvalue.length > 1)
+                keyvalue[0] = new ParameterDynamic(key);
+            res ~= func(keyvalue, stack)[0];
+        }
+        return [res];
     });
 
 	stack["range"] = Variable((Parameter[] params, Stack stack){
@@ -38,7 +57,6 @@ void container(Stack stack){
 		auto res = Variable(Variable.Type.data);
 		if(params.length > 0){
 			checkLength(1, params.length);
-			int counter;
 			params[0].collect(
 				stack,
 				(v){ res ~= v; },
@@ -48,12 +66,14 @@ void container(Stack stack){
 		return [res];
 	});
 
-	stack["append"] = Variable((Parameter[] params, Stack stack){
+	appendIndex = stack.register("append");
+
+	stack[appendIndex] = Variable((Parameter[] params, Stack stack){
 		checkLength(2, params.length);
 		params[0].get(stack) ~= params[1].get(stack);
 		return nothing;
 	});
 
-    stack["~="] = stack["append"];
+    stack["~="] = stack[appendIndex];
 
 }

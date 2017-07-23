@@ -35,13 +35,11 @@ class Statement {
 	FunctionReturn run(Stack stack){
 		try{
 			auto var = parameters[0].get(stack);
-			if(var.type == Variable.Type.func)
+			if(var.isCallable)
 				return var(parameters[1..$], stack);
-			else {
-				if(parameters.length > 1)
-					throw new CommandoError("Cannot call %s with parameters".format(var.type));
-				return [var];
-			}
+			else if(parameters.length > 1)
+				throw new CommandoError("Cannot call %s with parameters".format(var.type));
+			return [var];
 		}catch(CommandoError e){
 			throw new CommandoError("%s(%s): %s".format(contextIdentifier, line, lineText), stack, e);
 		}

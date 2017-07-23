@@ -8,7 +8,7 @@ import commando;
 
 void main(){
 
-		auto commando = new commando;
+		auto commando = new Interpreter;
 
 		
 

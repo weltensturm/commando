@@ -5,16 +5,16 @@ fibonacci = $a:
 
 check (fibonacci 10) == 55
 
+echo "fibonacci" (profile: fibonacci 30)
+
 
 fibonacciFast = $a:
     prev = 0
     cur = 0
     range a+1 | each $i v:
-        if i == 0:
-            cur = 0
-        if i == 1:
-            prev = 0
-            cur = 1
+        if i <= 1:
+            prev = i-1
+            cur = i
         if i > 1:
             prev' = prev
             prev = cur

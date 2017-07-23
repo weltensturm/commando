@@ -22,7 +22,6 @@ public import
 	commando.stack,
 	commando.statement,
 	commando.parameter,
-	commando.context,
 	commando.variable,
 	commando.globals.all,
 	commando.globals.arithmetic,

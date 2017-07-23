@@ -4,6 +4,37 @@ module commando.variable;
 import commando;
 
 
+Variable construct()(Variable[] delegate(Parameter[], Stack) fn){
+	return Variable(fn);
+}
+
+Variable construct()(Variable[] function(Parameter[], Stack) fn){
+	return Variable(fn.toDelegate);
+}
+
+Variable construct(Ret, Args...)(Ret delegate(Args) fn){
+	return Variable((Parameter[] params, Stack context){
+		Args args;
+		foreach(i, ref a; args){
+			a = cast(Args[i])params[i].get(context);
+		}
+		static if(is(Ret == void)){
+			fn(args);
+			return nothing;
+		}else
+			return [Variable(fn(args))];
+	});
+}
+
+Variable construct(Ret, Args...)(Ret function(Args) fn){
+	return construct(fn.toDelegate);
+}
+
+Variable construct(T)(auto ref T value){
+	return Variable(value);
+}
+
+
 struct Variable {
 
 	private class Data {
@@ -14,8 +45,10 @@ struct Variable {
 	union Value {
 		string text;
 		double number;
-		Function func;
+		Function dele;
+		FunctionReturn function(Parameter[], Stack) func;
 		Data data;
+		Object variant;
 	}
 
 	enum Type {
@@ -23,8 +56,10 @@ struct Variable {
 		text = 2,
 		number = 4,
 		func = 8,
-		data = 16,
-		boolean = 32
+		dele = 16,
+		data = 32,
+		boolean = 64,
+		variant = 128
 	}
 
 	Value value;
@@ -58,12 +93,18 @@ struct Variable {
 	}
 
 	this(Function value){
+		this.value.dele = value;
+		type = Type.dele;
+	}
+
+	this(FunctionReturn function(Parameter[], Stack) value){
 		this.value.func = value;
 		type = Type.func;
 	}
 
-	this(FunctionReturn function(Parameter[], Stack) value){
-		this(value.toDelegate);
+	this(Object value){
+		this.value.variant = value;
+		type=type.variant;
 	}
 
 	void checkType(Type type){
@@ -86,11 +127,6 @@ struct Variable {
 		return value.data;
 	}
 
-	ref Function func(){
-		checkType(Type.func);
-		return value.func;
-	}
-
 	bool boolean(){
 		if(isNull)
 			return false;
@@ -101,6 +137,10 @@ struct Variable {
 
 	bool isNull(){
 		return type == Type.null_;
+	}
+
+	bool isCallable(){
+		return cast(bool)(type & (Type.func | Type.dele));
 	}
 
 	bool equals(Variable other){
@@ -114,25 +154,40 @@ struct Variable {
 			case Type.null_:
 				return true;
 			case Type.func:
-				return func == other.func;
+				return value.func == other.value.func;
+			case Type.dele:
+				return value.dele == other.value.dele;
 			case Type.data:
 				return data == other.data;
 			case Type.number:
 				return number == other.number;
+			case Type.variant:
+				return value.variant == other.value.variant;
 		}
 	}
 
 	T opCast(T)(){
 		static if(is(T == bool))
 			return boolean;
-		else static if(isNumeric!T)
+		else static if(std.traits.isNumeric!T)
 			return number.to!T;
 		else static if(is(T == string))
 			return text;
+		else {
+			checkType(Type.variant);
+			if(auto v = cast(T)value.variant)
+				return v;
+			else
+				throw new CommandoError("Type mismatch: expected %s, got %s".format(typeid(T).to!string, typeid(value.variant).to!string));
+		}
 	}
 
-	Variable[] opCall(Parameter[] params, Stack context){
-		return func()(params, context);
+	FunctionReturn opCall()(auto ref Parameter[] params, auto ref Stack context){
+		checkType(Type.func | Type.dele);
+		if(type == Type.func)
+			return value.func(params, context);
+		else
+			return value.dele(params, context);
 	}
 
 	int opApply(int delegate(Variable, Variable) dg){
@@ -158,18 +213,12 @@ struct Variable {
 		return result;
 	}
 
-	Variable find(string index, bool imports=true){
+	Variable find(string index){
 		debug(Data){
 			writeln("searching ", this, " for ", index);
 		}
 		if(index in data.map)
 			return this;
-		if(imports && "__imported" in data.map){
-			foreach(_, imp; data.map["__imported"]){
-				if(index in imp.data.map)
-					return imp;
-			}
-		}
 		if("__index" in data.map)
 			return data.map["__index"].find(index);
 		return Variable();
@@ -200,21 +249,6 @@ struct Variable {
 			return opIndex(v.text);
 	}
 
-	Variable slot(string index){
-		if(index.isNumeric && index.to!size_t == data.array.length)
-			data.array ~= Variable();
-		if(index.isNumeric && index.to!size_t < data.array.length){
-			return data.array[index.to!size_t];
-		}
-		auto var = find(index, false);
-		if(var.isNull || index !in var.data.map){
-			var = Variable();
-			data.map[index] = var;
-		}
-		return var;
-
-	}
-
 	void opIndexAssign()(Variable variable, string index){
 		if(index.isNumeric && index.to!size_t == data.array.length){
 			data.array ~= variable;
@@ -228,17 +262,7 @@ struct Variable {
 	}
 
 	void opIndexAssign(Ret, Args...)(Ret delegate(Args) fn, string index){
-		this[index] = (Parameter[] params, Stack context){
-			Args args;
-			foreach(i, ref a; args){
-				a = cast(Args[i])params[i].get(context);
-			}
-			static if(is(Ret == void)){
-				fn(args);
-				return nothing;
-			}else
-				return cast(Ret)fn(args);
-		};
+		this[index] = construct(fn);
 	}
 
 	void opIndexAssign(Ret, Args...)(Ret function(Args) fn, string index){
@@ -272,7 +296,9 @@ struct Variable {
 		}else if(type == Type.number){
 			return value.number.to!string;
 		}else if(type == Type.func){
-			return "function:%s".format(value.func.ptr);
+			return "function:%s".format(&value.func);
+		}else if(type == Type.dele){
+			return "delegate:%s".format(value.dele.ptr);
 		}else if(type == Type.null_){
 			return "null";
 		}else if(type == Type.data){

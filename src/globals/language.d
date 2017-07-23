@@ -66,18 +66,18 @@ void language(Stack stack){
         assert(0);
     });
 
-    stack["error"] = Variable(function Variable[](Parameter[] params, Stack stack){
+    stack["error"] = function Variable[](Parameter[] params, Stack stack){
         throw new CommandoError(params.map!(a => a.get(stack).text).join(" "));
-    });
+    };
 
-    stack["check"] = Variable((Parameter[] params, Stack stack){
+    stack["check"] = (Parameter[] params, Stack stack){
     	checkLength(1, params.length);
         foreach(p; params){
                 if(!p.get(stack).to!bool)
                     throw new CommandoError("Check failed: (" ~ p.statement ~ ")");
         }
         return params.map!(a => a.get(stack)).array;
-    });
+    };
 
     auto elseIndex = stack.register("else");
 
@@ -85,18 +85,18 @@ void language(Stack stack){
 
     stack["if"] = Variable((Parameter[] params, Stack stack){
         if(params[0].get(stack).boolean){
+            stack[elseIndex] = noop;
             auto result = params[1].get(stack)([], stack);
             if(stack[returnIndex].type != Variable.Type.null_)
                 return nothing;
-            stack[elseIndex] = noop;
             return result;
         }else{
             stack[elseIndex] = Variable((Parameter[] params, Stack stack){
+                stack[elseIndex] = noop;
                 checkLength(1, params.length);
                 auto result = params[0].get(stack)([], stack);
                 if(stack[returnIndex].type != Variable.Type.null_)
                     return nothing;
-                stack[elseIndex] = noop;
                 return result;
             });
         }
