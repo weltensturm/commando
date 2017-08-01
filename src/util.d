@@ -3,12 +3,12 @@ module commando.util;
 import commando;
 
 
-alias FunctionReturn = Variable[];
+alias FunctionReturn = Variable;
 alias Function = FunctionReturn delegate(Parameter[], Stack);
 
 
 auto nothing(){
-    return [Variable()];
+    return Variable();
 }
 
 
@@ -18,25 +18,21 @@ void checkLength(long expected, long actual){
 }
 
 
-FunctionReturn checkReturn()(auto ref Stack stack, bool remove=false){
-    if(!stack[returnIndex].data.array.length)
-        return [];
-	Variable[] result;
-	foreach(i, a; stack[returnIndex])
-		result ~= a;
-	if(remove)
-		stack[returnIndex] = Variable(Variable.Type.data);
-	return result;
+bool checkReturn(bool reset=false){
+    if(reset && returnTrigger){
+        returnTrigger = false;
+        return true;
+    }
+    return returnTrigger;
 }
 
 
-Variable[] run()(auto ref Statement[] statements, auto ref Stack stack, bool remove){
-	Variable[] result;
+FunctionReturn run()(auto ref Statement[] statements, auto ref Stack stack, bool remove){
+	FunctionReturn result;
     foreach(statement; statements){
-        auto res = statement.run(stack);
-        if(auto a = stack.checkReturn(remove))
-            return a;
-        result = res;
+        result = statement.run(stack);
+        if(checkReturn(remove))
+            return stack[returnIndex];
     }
     return result;
 }

@@ -80,6 +80,8 @@ class ParameterDynamic: Parameter {
 
 	Variable variable;
 
+	this(){}
+
 	this(Variable variable){
 		this.variable = variable;
 	}
@@ -111,7 +113,7 @@ class ParameterCall: Parameter {
 		debug(Parameter){
 			writeln("CALL \"", statement, "\"");
 		}
-		return run(statements, stack, true)[0];
+		return run(statements, stack, true);
 	}
 
 	override void set(Stack, Variable){
@@ -150,7 +152,7 @@ class ParameterData: Parameter {
 		debug(Parameter){
 			writeln("DATA ", statement);
 		}
-		return run(statements, stack, true)[0];
+		return run(statements, stack, true);
 	}
 
 	override void set(Stack context, Variable var){
@@ -209,10 +211,10 @@ class ParameterFunction: Parameter {
 			throw new CommandoError("Cannot collect parametrized function (for now)");
 		stack.push(names.length.to!int);
 		foreach(statement; statements){
-			auto r = statement.run(stack)[0];
+			auto r = statement.run(stack);
 			if(r)
 				unnamed(r);
-			if(stack.checkReturn(false))
+			if(checkReturn(false))
 				break;
 		}
 		foreach(i; argTargets.length..names.length)
@@ -264,8 +266,7 @@ class ParameterAssignmentTarget: ParameterVariable {
 
 class ParameterIndexCall: Parameter {
 	
-	Parameter container;
-	Parameter element;
+	Parameter[3] parameters;
 
 	string identifier;
 	long line;
@@ -278,28 +279,29 @@ class ParameterIndexCall: Parameter {
 		auto parser = new Parser(identifier, line);
 		parser.parse(statement);
 		assert(parser.statements.length == 1 && parser.statements[0].parameters.length == 3);
-		container = parser.statements[0].parameters[1];
-		if(auto left = cast(ParameterLiteral)container){
+		parameters[0] = parser.statements[0].parameters[1];
+		if(auto left = cast(ParameterLiteral)parameters[0]){
 			auto right = parser.statements[0].parameters[2].to!ParameterLiteral.variable.number;
 			number = left.variable.number + right/(10^^right.log10.ceil);
 		}else{
 			if(auto e = cast(ParameterVariable)parser.statements[0].parameters[2])
-				element = new ParameterLiteral(e.name);
+				parameters[1] = new ParameterLiteral(e.name);
 			else
-				element = parser.statements[0].parameters[2];
+				parameters[1] = parser.statements[0].parameters[2];
 		}
+		parameters[2] = new ParameterDynamic(Variable());
 	}
 	
 	override Variable get(Stack stack){
 		debug(Parameter){
 			if(!number.isFinite)
-				writeln("INDEX DATA ", container.get(stack), ".", element.get(stack), " = ", stack[indexIndex]([container, element], stack)[0]);
+				writeln("INDEX DATA ", container.get(stack), ".", element.get(stack), " = ", stack[indexIndex]([container, element], stack));
 		}
 		if(number.isFinite)
 			return Variable(number);
 		else {
 			try {
-				return stack[indexIndex]([container, element], stack)[0];
+				return stack[indexIndex](parameters[0..2], stack);
 			}catch(CommandoError e){
 				throw new CommandoError("%s(%s): %s".format(identifier, line, statement), stack, e);
 			}
@@ -310,7 +312,8 @@ class ParameterIndexCall: Parameter {
 		try {
 			if(number.isFinite)
 				throw new CommandoError("Cannot assign to number");
-			stack[indexAssignIndex]([container, element, new ParameterDynamic(v)], stack);
+			parameters[2].to!ParameterDynamic.variable = v;
+			stack[indexAssignIndex](parameters[], stack);
 		}catch(CommandoError e){
 			throw new CommandoError("%s(%s): %s".format(identifier, line, statement), stack, e);
 		}
@@ -318,8 +321,8 @@ class ParameterIndexCall: Parameter {
 
 	override void precompute(Stack stack){
 		if(!number.isFinite){
-			container.precompute(stack);
-			element.precompute(stack);
+			parameters[0].precompute(stack);
+			parameters[1].precompute(stack);
 		}
 	}
 

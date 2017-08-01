@@ -50,7 +50,6 @@ struct PassiveArray(T, size_t steps=10) {
 class Stack {
     Variable[] stack;
     string[] names;
-    //int[] level;
     PassiveArray!int level;
     bool precompute = true;
     
@@ -65,6 +64,7 @@ class Stack {
         level ~= 0;
     }
 
+    pragma(inline)
     int index()(auto ref Pos pos){
         return (pos.level < 0 ? level[$-2] : level[pos.level]) + pos.index;
     }
@@ -120,6 +120,10 @@ class Stack {
         return stack[index(idx)];
     }
 
+    Variable opIndex()(string s){
+        assert(precompute);
+        return this[getIndex(s)];
+    }
 
     void prepush(){
         assert(precompute);
@@ -149,7 +153,9 @@ class Stack {
     Pos ensureIndex(string name){
         assert(precompute);
         if(!names.canFind(name)){
-            writeln('\t'.repeat(level.length), "register ", name, " ", names.length);
+            debug(Stack){
+                writeln('\t'.repeat(level.length), "register ", name, " ", names.length);
+            }
             names ~= name;
             level[$-1] += 1;
         }
@@ -161,7 +167,7 @@ class Stack {
         foreach(index, names; levelNames.enumerate){
             if(auto i = names.countUntil(name)+1)
                 return Pos(
-                        index+2==level.length && index != 0 ? -1 : index.to!int,
+                        index+2 == level.length && index != 0 ? -1 : index.to!int,
                         i.to!int-1
                 );
         }

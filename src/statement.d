@@ -39,7 +39,7 @@ class Statement {
 				return var(parameters[1..$], stack);
 			else if(parameters.length > 1)
 				throw new CommandoError("Cannot call %s with parameters".format(var.type));
-			return [var];
+			return var;
 		}catch(CommandoError e){
 			throw new CommandoError("%s(%s): %s".format(contextIdentifier, line, lineText), stack, e);
 		}

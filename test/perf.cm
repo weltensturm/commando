@@ -1,21 +1,14 @@
 
 
 seconds = profile:
-    N = 100
+    N = 1000
     S = 4000
-
 
     t = range N | map $i: [a = 0, b = 1, f = i * 0.25]
 
-    check t.0.a == 0
-
-
-    r = range S-1 | map:
+    range S-1 | each:
         t | each $v:
             v.a += v.b * v.f
             v.b -= v.a * v.f
-        t.1.b
-
-    check r.0 == 0.9375
 
 echo "perf" seconds

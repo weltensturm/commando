@@ -33,7 +33,7 @@ void loadEcho(Stack stack){
 		auto fn = params[0].get(stack);
 		auto start = Clock.currTime;
 		fn([], stack);
-		return [Variable((Clock.currTime - start).split!"msecs"().msecs / 1000.0)];
+		return Variable((Clock.currTime - start).split!"msecs"().msecs / 1000.0);
 	});
 
 }
