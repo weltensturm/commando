@@ -12,8 +12,7 @@ test = $:
 		return 1
 	error "should not be here"
 
-echo (test)
+check (test) == 1
 
 
 check (null and 1 or 2) == 2
-

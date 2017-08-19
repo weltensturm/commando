@@ -4,53 +4,11 @@ module commando.stack;
 import commando;
 
 
-struct PassiveArray(T, size_t steps=10) {
-    
-    T[] data;
-    size_t length;
-    
-    auto ref T opIndex(size_t i){
-        assert(i < length);
-        return data[i];
-    }
-    
-    size_t opDollar(){
-        return length;
-    }
-    
-    void opOpAssign(string op: "~")(auto ref T value){
-        if(data.length < length+1)
-            data.length += steps;
-        data[length] = value;
-        length++;
-    }
-    
-    int opApply(int delegate(ref T) dg){
-        int result = 0;
-        foreach(ref v; data[0..length]){
-            result = dg(v);
-            if(result)
-                break;
-        }
-        return result;
-    }
-    
-    void pop(){
-        assert(length > 0);
-        length--;
-    }
-
-    PassiveArray dup(){
-        return PassiveArray(data.dup, length);
-    }
-
-}
-
-
 class Stack {
-    Variable[] stack;
+    PassiveArray!(Variable, 100) stack;
+    PassiveArray!(Closure, 10) closures;
+    PassiveArray!(Frame, 10) frames;
     string[] names;
-    PassiveArray!int level;
     bool precompute = true;
     
     static struct Pos {
@@ -59,50 +17,114 @@ class Stack {
     }
     
     this(){
-        stack.length = 100;
-        level ~= 0;
-        level ~= 0;
+        stack.data.length = 100;
+        closures.expand(1);
+        frames ~= new Frame;
     }
 
-    pragma(inline)
-    int index()(auto ref Pos pos){
-        return (pos.level < 0 ? level[$-2] : level[pos.level]) + pos.index;
-    }
-
-    void push(int length){
-        push([], length);
-    }
-
-    void push()(auto ref Variable[] vars, int add){
+    Variable[] push()(Frame frame, Closure closure){
         debug(Stack){
-            std.stdio.write('\t'.repeat(level.length), "push ");
-            foreach(i, v; vars){
-                std.stdio.write(level[$-1]+i, "=", v, " ");
-            }
-            foreach(i; 0..add){
-                std.stdio.write(level[$-1]+i, "=null ");
-            }
+            std.stdio.write('\t'.repeat(closures.length),
+                            "frame=",
+                            frame.lexicalLevel,
+                            " (",
+                            frame.localNames[0..frame.parameterCount].join(", "),
+                            ") ",
+                            frame.localNames[frame.parameterCount..$].join(", "),
+                            " {");
             writeln("");
         }
-        auto end = level[$-1]+vars.length.to!int+add;
-        while(end+1 > stack.length)
-            stack.length += 100;
-        stack[level[$-1] .. end-add] = vars;
-        level ~= end;
+        closures ~= closure;
+        frames ~= frame;
+        stack.expand(frame.localNames.length);
+        return local;
+    }
+
+    void push()(Frame frame, Closure closure, Parameter[] params){
+        debug(Stack){
+            string text = '\t'.repeat(closures.length).to!string ~
+                          "frame=" ~
+                          frame.lexicalLevel.to!string ~
+                          " (";
+        }
+        stack.allocate(frame.localNames.length);
+        foreach(i, p; params){
+            stack.data[stack.length+i] = p.get(this);
+            debug(Stack){
+                text ~= frame.localNames[i] ~ "=" ~ stack.data[stack.length+i].to!string;
+                if(i < params.length-1)
+                    text ~= ", ";
+            }
+        }
+        stack.length += frame.localNames.length;
+        closures ~= closure;
+        frames ~= frame;
+        debug(Stack){
+            writeln(text, ") ", frame.localNames[frame.parameterCount..$].join(", "), " {");
+        }
     }
 
     void pop(){
-        level.length -= 1;
+        stack.length -= frames[$-1].localNames.length;
+        closures.pop;
+        frames.pop;
         debug(Stack){
-            writeln('\t'.repeat(level.length), "pop");
+            writeln('\t'.repeat(closures.length), "}");
         }
+    }
+
+    Variable[] local(){
+        return stack[$-frames[$-1].locals.length..$];
+    }
+
+    ref Variable opIndex()(auto ref Pos idx){
+        debug(Stack){
+            auto name = ""; //precompute ? "\"" ~ levelNames[idx.level][idx.index] ~ "\" " : "";
+            writeln('\t'.repeat(closures.length),
+                    "get ",
+                    idx.level == frames[$-1].lexicalLevel
+                        ? "local "
+                    : idx.level == 0
+                        ? "global "
+                        : "nonlocal ",
+                    name,
+                    idx);
+        }
+        if(idx.level == 0){
+            return stack[idx.index];
+        }else if(idx.level == frames[$-1].lexicalLevel){
+            return local[idx.index];
+        }else{
+            if(!closures[$-1])
+                throw new CommandoError("Accessing nonlocal without closure");
+            return closures[$-1][idx];
+        }
+    }
+
+    Variable opIndex()(string s){
+        assert(precompute);
+        return this[getIndex(s)];
     }
 
     void opIndexAssign()(auto ref Variable v, auto ref Pos idx){
         debug(Stack){
-            writeln('\t'.repeat(level.length), "set ", idx, "=", index(idx), " ", v);
+            writeln('\t'.repeat(closures.length),
+                    idx.level == frames[$-1].lexicalLevel
+                        ? "local "
+                    : idx.level == 0
+                        ? "global "
+                        : "nonlocal ",
+                    idx.level == frames[$-1].lexicalLevel ? frames[$-1].localNames[idx.index] : idx.index.to!string,
+                    " = ",
+                    v);
         }
-        stack[index(idx)] = v;
+        if(idx.level == 0){
+            stack[idx.index] = v;
+        }else if(idx.level == frames[$-1].lexicalLevel){
+            local[idx.index] = v;
+        }else{
+            closures[$-1][idx] = v;
+        }
     }
 
     void opIndexAssign()(auto ref Variable v, string name){
@@ -113,34 +135,32 @@ class Stack {
         this[ensureIndex(name)] = construct(v);
     }
 
-    Variable opIndex()(auto ref Pos idx){
-        debug(Stack){
-            writeln('\t'.repeat(level.length), "get ", idx, "=", index(idx), " ", stack[index(idx)]);
-        }
-        return stack[index(idx)];
-    }
+    void delegate(int, int, int)[] onAccess;
 
-    Variable opIndex()(string s){
+    int prepush(void delegate(int from, int level, int index) dg){
         assert(precompute);
-        return this[getIndex(s)];
-    }
-
-    void prepush(){
-        assert(precompute);
-        level ~= level[$-1];
+        closures.expand(1);
+        frames ~= new Frame;
+        frames[$-1].lexicalLevel = frames[$-2].lexicalLevel+1;
+        names ~= "";
+        onAccess ~= dg;
         debug(Stack){
-            writeln('\t'.repeat(level.length-1), "prepush ");
+            writeln('\t'.repeat(closures.length-1), "compile frame=", frames[$-1].lexicalLevel, " { ");
         }
+        return onAccess.length.to!int;
     }
     
     string[] prepop(){
         assert(precompute);
-        auto r = names[level[$-2]..$].dup;
+        frames.pop;
+        closures.pop;
+        onAccess.length--;
+        auto end = names.length - names.retro.countUntil("");
+        auto r = names[end..$].dup;
         debug(Stack){
-            writeln('\t'.repeat(level.length-1), "prepop ", r.map!(a => "%s=%s".format(getIndex(a), a)).join(" "));
+            writeln('\t'.repeat(closures.length), "} ");
         }
-        level.pop;
-        names.length = level[$-1];
+        names.length = end-1;
         return r;
     }
     
@@ -153,48 +173,45 @@ class Stack {
     Pos ensureIndex(string name){
         assert(precompute);
         if(!names.canFind(name)){
-            debug(Stack){
-                writeln('\t'.repeat(level.length), "register ", name, " ", names.length);
-            }
             names ~= name;
-            level[$-1] += 1;
+            stack.expand(1);
+            frames[$-1].localNames ~= name;
+            frames[$-1].locals.length += 1;
+            debug(Stack){
+                writeln('\t'.repeat(closures.length), "register \"", name, "\" ", getIndex(name));
+            }
         }
         return getIndex(name);
     }
 
     Pos getIndex(string name){
         assert(precompute);
-        foreach(index, names; levelNames.enumerate){
-            if(auto i = names.countUntil(name)+1)
-                return Pos(
-                        index+2 == level.length && index != 0 ? -1 : index.to!int,
-                        i.to!int-1
-                );
+        foreach(level, names; levelNames.enumerate){
+            if(auto i = names.countUntil(name)+1){
+                auto pos = Pos(level.to!int, i.to!int-1);
+                debug(Stack){
+                    writeln('\t'.repeat(closures.length), "access ", pos);
+                }
+                foreach(dg; onAccess)
+                    dg(onAccess.length.to!int, pos.level, pos.index);
+                return pos;
+            }
         }
         throw new CommandoError("Compiler error: Unknown \"%s\"".format(name));
     }
 
     string[][] levelNames(){
-        string[][] levelNames;
-        size_t previous = 0;
-        foreach(l; level){
-            if(l == 0)
-                continue;
-            levelNames ~= names[previous .. l];
-            previous = l;
-        }
-        return levelNames;
+        return names.split([""]).array;
     }
 
     void currentNames(void delegate(string[], Pos[]) dg){
-        auto names = names[level[$-2] .. level[$-1]];
+        auto names = levelNames[$-1];
         dg(names, names.map!(a => getIndex(a)).array);
     }
 
     Stack dup(){
         auto a = new Stack;
         a.stack = stack.dup;
-        a.level = level.dup;
         a.names = names.dup;
         return a;
     }

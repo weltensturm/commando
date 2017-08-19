@@ -12,7 +12,7 @@ void container(Stack stack){
 
     stack["each"] = Variable((Parameter[] params, Stack stack){
     	auto func = params[$-1].get(stack);
-		auto count = params[$-1].to!ParameterFunction.argTargets.length;
+		auto count = params[$-1].to!ParameterFunction.frame.parameterCount;
         auto res = nothing;
     	foreach(key, value; params[0].get(stack)){
 			if(count > 0)
@@ -26,7 +26,7 @@ void container(Stack stack){
 
     stack["map"] = Variable((Parameter[] params, Stack stack){
         auto func = params[$-1].get(stack);
-        auto count = params[$-1].to!ParameterFunction.argTargets.length;
+        auto count = params[$-1].to!ParameterFunction.frame.parameterCount;
 		auto data = params[0].get(stack);
         auto res = Variable(Variable.Type.data);
 		res.data.array.length = data.data.array.length + data.data.map.length;

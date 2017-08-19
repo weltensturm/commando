@@ -17,6 +17,9 @@ public import
 	std.range,
 
 	commando.util,
+	commando.frame,
+	commando.closure,
+	commando.passiveArray,
 	commando.interpreter,
 	commando.parser,
 	commando.stack,

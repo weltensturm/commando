@@ -66,7 +66,7 @@ class ParameterVariable: Parameter {
 	}
 
 	override void set(Stack stack, Variable var){
-		stack[stackIndex] = var;
+		stack[stackIndex].assign(var);
 	}
 
 	override void precompute(Stack stack){
@@ -173,43 +173,60 @@ class ParameterFunction: Parameter {
 	string identifier;
 	bool isFunction;
 
-	string[] names;
-	Stack.Pos[] argTargets;
-	Stack.Pos[] blockTargets;
-	Variable[] parameterCache;
+	Frame frame;
 
-	this(bool isFunction, string[] names, string block, string identifier, long line){
+	long line;
+
+	this(bool isFunction, string[] parameters, string block, string identifier, long line){
 		this.statement = block;
 		this.identifier = identifier;
-		this.names = names;
 		this.isFunction = isFunction;
+		this.line = line;
 		auto parser = new Parser(identifier, line);
 		parser.parse(block);
 		statements = parser.statements;
+		frame = new Frame;
+		frame.localNames ~= parameters;
+		frame.parameterCount = parameters.length;
 	}
 
 	override Variable get(Stack stack){
+		Closure closure;
+		if(frame.nonlocals.length){
+			closure = new Closure;
+			foreach(idx; frame.nonlocals)
+				closure[idx] = stack[idx];
+		}
         return Variable((Parameter[] params, Stack caller){
 			debug(Parameter){
-				writeln("CALL ", isFunction ? "FN " : "BLOCK ", names, " \"", statement, "\"");
+				writeln("CALL ", isFunction ? "FN " : "BLOCK ", frame.localNames, " \"", statement, "\"");
 			}
-			checkLength(argTargets.length, params.length);
-			foreach(i, ref v; parameterCache)
-				v = params[i].get(caller);
-        	stack.push(parameterCache, (names.length-argTargets.length).to!int);
-            auto r = run(statements, stack, isFunction);
-            stack.pop;
-            return r;
+			checkLength(frame.parameterCount, params.length);
+			stack.push(frame, closure, params);
+			foreach(i; frame.captured)
+				stack.local[i] = i >= frame.parameterCount ? Variable(Variable.Type.reference) : Variable(&stack.local[i]);
+			auto r = run(statements, stack, isFunction);
+			stack.pop;
+			return r;
         });
 	}
 
 	override void collect(Stack stack, void delegate(Variable) unnamed, void delegate(string, Variable) named){
 		debug(Parameter){
-			writeln("COLLECT ", isFunction ? "FN " : "BLOCK ", names, " \"", statement, "\"");
+			writeln("COLLECT ", isFunction ? "FN " : "BLOCK ", frame.localNames, " \"", statement, "\"");
 		}
-		if(argTargets.length)
+		if(frame.parameterCount)
 			throw new CommandoError("Cannot collect parametrized function (for now)");
-		stack.push(names.length.to!int);
+			
+		Closure closure;
+		if(frame.nonlocals.length){
+			closure = new Closure;
+			foreach(idx; frame.nonlocals)
+				closure[idx] = stack[idx];
+		}
+		stack.push(frame, closure);
+		foreach(i; frame.captured)
+			stack.local[i] = Variable(Variable.Type.reference);
 		foreach(statement; statements){
 			auto r = statement.run(stack);
 			if(r)
@@ -217,8 +234,8 @@ class ParameterFunction: Parameter {
 			if(checkReturn(false))
 				break;
 		}
-		foreach(i; argTargets.length..names.length)
-			named(names[i], stack[blockTargets[i]]);
+		foreach(i, idx; frame.locals)
+			named(frame.localNames[i], stack[idx]);
 		stack.pop;
 	}
 
@@ -227,22 +244,27 @@ class ParameterFunction: Parameter {
 	}
 
 	override void precompute(Stack stack){
-		stack.prepush;
-		foreach(a; names)
-			argTargets ~= stack.register(a);
+		frame.lexicalLevel = stack.prepush((usedFrom, level, index){
+			if(level == 0)
+				return;
+			if(frame.lexicalLevel == level && usedFrom > level && !frame.captured.canFind(index))
+				frame.captured ~= index;
+			if(frame.lexicalLevel <= usedFrom && frame.lexicalLevel > level && !frame.nonlocals.canFind(Stack.Pos(level, index))){
+				frame.nonlocals ~= Stack.Pos(level, index);
+			}
+		});
+		foreach(a; frame.localNames[0..frame.parameterCount])
+			frame.locals ~= stack.register(a);
 		foreach(a; statements.map!(s => s.names(stack)).join)
 			stack.ensureIndex(a);
 		foreach(s; statements)
 			s.precompute(stack);
 		stack.currentNames((names, indices){
-			foreach(i; argTargets.length..names.length){
-				blockTargets ~= indices[i];
+			foreach(i; indices[frame.parameterCount..$]){
+				frame.locals ~= i;
 			}
 		});
-		auto names = stack.prepop;
-		assert(names.startsWith(this.names), "!%s.startsWith(%s)".format(this.names, names));
-		this.names = names;
-		parameterCache.length = argTargets.length;
+		frame.localNames = stack.prepop;
 	}
 
 }
@@ -295,7 +317,7 @@ class ParameterIndexCall: Parameter {
 	override Variable get(Stack stack){
 		debug(Parameter){
 			if(!number.isFinite)
-				writeln("INDEX DATA ", container.get(stack), ".", element.get(stack), " = ", stack[indexIndex]([container, element], stack));
+				writeln("INDEX DATA ", parameters[0].get(stack), ".", parameters[1].get(stack), " = ", stack[indexIndex](parameters[0..2], stack));
 		}
 		if(number.isFinite)
 			return Variable(number);

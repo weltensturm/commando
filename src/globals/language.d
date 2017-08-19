@@ -110,10 +110,11 @@ void language(Stack stack){
     stack["|"] = Variable((Parameter[] params, Stack stack){
     	checkLength(2, params.length);
         foreach(s; params[1].to!ParameterCall.statements){
-        	if(s.parameters.length >= 2 && s.parameters[1] != params[0])
+        	if(s.parameters.length >= 2 && !is(typeof(s.parameters[1]) == ParameterDynamic))
 	            s.parameters = s.parameters[0..1]
-	                           ~ params[0]
+	                           ~ new ParameterDynamic
 	                           ~ s.parameters[1..$];
+            s.parameters[1].to!ParameterDynamic.variable = params[0].get(stack);
         }
         return params[1].get(stack);
     });

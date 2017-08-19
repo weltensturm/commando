@@ -50,6 +50,7 @@ struct Variable {
         FunctionReturn function(Parameter[], Stack) func;
         Data data;
         Object variant;
+        Variable* reference;
     }
 
     enum Type {
@@ -60,7 +61,8 @@ struct Variable {
         dele = 16,
         data = 32,
         boolean = 64,
-        variant = 128
+        variant = 128,
+        reference = 256
     }
 
     Value value;
@@ -70,6 +72,8 @@ struct Variable {
         this.type = type;
         if(type == Type.data)
             value.data = new Data;
+        else if(type == Type.reference)
+            value.reference = new Variable(Type.null_);
     }
 
     this(bool boolean){
@@ -108,44 +112,65 @@ struct Variable {
         type=type.variant;
     }
 
+    this(Variable* pointer){
+        value.reference = new Variable;
+        value.reference.value = pointer.value;
+        value.reference.type = pointer.type;
+        type = Type.reference;
+    }
+
     void checkType(Type type){
-        if(!(type & this.type))
+        if(this.type == Type.reference)
+            return value.reference.checkType(type);
+        else if(!(type & this.type))
             throw new CommandoError("Type mismatch: expected %s, got %s".format(type, this.type).chomp("_"));
+    }
+
+    ref Type getType(){
+        if(type == Type.reference)
+            return value.reference.getType;
+        return type;
+    }
+
+    ref Value getValue(){
+        if(type == Type.reference)
+            return value.reference.getValue;
+        return value;
     }
 
     ref double number(){
         checkType(Type.number);
-        return value.number;
+        return getValue.number;
     }
 
     ref string text(){
         checkType(Type.text);
-        return value.text;
+        return getValue.text;
     }
 
     Data data(){
         checkType(Type.data);
-        return value.data;
+        return getValue.data;
     }
 
     bool boolean(){
         if(isNull)
             return false;
-        if(type == Type.boolean)
-            return value.number != 0;
+        if(getType == Type.boolean)
+            return getValue.number != 0;
         return true;
     }
 
     bool isNull(){
-        return type == Type.null_;
+        return getType == Type.null_;
     }
 
     bool isCallable(){
-        return cast(bool)(type & (Type.func | Type.dele));
+        return cast(bool)(getType & (Type.func | Type.dele));
     }
 
     bool equals(Variable other){
-        if(type != other.type)
+        if(getType != other.getType)
             return false;
         final switch(type){
             case Type.boolean:
@@ -164,6 +189,17 @@ struct Variable {
                 return number == other.number;
             case Type.variant:
                 return value.variant == other.value.variant;
+            case Type.reference:
+                return value.reference.equals(other);
+        }
+    }
+
+    void assign(Variable var){
+        if(type == Type.reference)
+            (*value.reference).assign(var);
+        else {
+            value = var.getValue;
+            type = var.getType;
         }
     }
 
@@ -185,15 +221,15 @@ struct Variable {
 
     FunctionReturn opCall()(auto ref Parameter[] params, auto ref Stack context){
         checkType(Type.func | Type.dele);
-        if(type == Type.func)
-            return value.func(params, context);
+        if(getType == Type.func)
+            return getValue.func(params, context);
         else
-            return value.dele(params, context);
+            return getValue.dele(params, context);
     }
 
     int opApply(int delegate(Variable, Variable) dg){
         int result = 0;
-        if(type == Type.text){
+        if(getType == Type.text){
             foreach(i, v; text){
                 result = dg(Variable(i), Variable(v.to!string));
                 if(result)
@@ -244,7 +280,7 @@ struct Variable {
     }
 
     Variable opIndex(Variable v){
-        if(v.type == Type.number)
+        if(v.getType == Type.number)
             return opIndex(v.number);
         else
             return opIndex(v.text);
@@ -306,6 +342,8 @@ struct Variable {
             return "data:%s&%s".format(value.data.array.ptr, cast(void*)value.data.map);
         }else if(type == Type.boolean){
             return boolean.to!string;
+        }else if(type == Type.reference){
+            return value.reference.toString;
         }else{
             throw new CommandoError("Could not convert %s to string".format(type));
         }

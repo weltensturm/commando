@@ -16,6 +16,7 @@ private void testAll(){
 	commando.load("test/perf.cm");
 	commando.load("test/pipes.cm");
 	commando.load("test/fibonacci.cm");
+	commando.load("test/capturing.cm");
 }
 
 /+

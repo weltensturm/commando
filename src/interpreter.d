@@ -51,6 +51,7 @@ class Module {
 	string text;
 	string[] names;
 	Statement[] statements;
+	Frame frame;
 
 	this(string path){
 		this.path = path;
@@ -63,10 +64,15 @@ class Module {
 	}
 
 	void compileNames()(auto ref Stack stack){
-		stack.prepush;
+		stack.prepush((a,b,c){});
 		names = statements.map!(s => s.names(stack)).join;
-		foreach(a; names)
-			stack.ensureIndex(a);
+		frame = new Frame;
+		frame.localNames = names;
+		frame.lexicalLevel = 1;
+		frame.locals.length = names.length;
+		foreach(i, a; names){
+			frame.locals[i] = stack.ensureIndex(a);
+		}
 	}
 
 	void compile()(auto ref Stack stack){
@@ -77,7 +83,10 @@ class Module {
 	}
 
 	void run()(auto ref Stack stack){
-		stack.push(names.length.to!int);
+		stack.push(frame, null);
+		foreach(a; frame.locals){
+			stack[a] = Variable(Variable.Type.reference);
+		}
 		foreach(s; statements)
 			s.run(stack);
 		stack.pop;

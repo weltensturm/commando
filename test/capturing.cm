@@ -1,0 +1,43 @@
+
+
+level0v = 0
+
+test =:
+    v = 1
+    f = $:
+        v' = 2
+        #echo v v'
+        return v
+    f
+    return f
+
+pollute =:
+    v = "ha ha"
+    f = $:
+        v = "your not-captured stuff has been overwritten"
+    return f
+
+testfn = (test)
+(pollute)
+result = (testfn)
+#echo "result =" result
+check result == 1
+
+
+closures = range 10 | map $a::a
+closures | each $a: echo a
+
+Class = :data:
+    v = 1
+    add = $a: v += a
+    get = $: v
+
+d = (Class)
+d.add 1
+echo d.v
+
+d2 = (Class)
+d2.add 4
+echo d2.v
+
+
